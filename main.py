@@ -1,51 +1,58 @@
 import requests
 from twilio.rest import Client
-import os
+from config import OWM_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM, WHATSAPP_TO, LATITUD, LONGITUD, WEATHER_API_URL
 
-latitud = "39.985782"
-longitud = "4.014402"
+# OpenWeatherMap API endpoint
+# Utilizando la URL, latitud y longitud desde el archivo config
+weather_api_url = WEATHER_API_URL
 
-website = "https://api.openweathermap.org/data/2.5/onecall"
-
+# Parameters for the weather API request
 parameters = {
-      "lat": latitud,
-      "lon": longitud,
-      "timezone": "Europe/Madrid",
-      "exclude": "alerts,current,minutely,daily",
-      "appid": "bac2e6b0b08ce3fa646a40e3a2658c58"
+    "lat": LATITUD,
+    "lon": LONGITUD,
+    "exclude": "alerts,current,minutely,daily",
+    "appid": OWM_API_KEY
 }
 
-response = requests.get(website, params=parameters)
-response.raise_for_status()
-data = response.json()
+try:
+    # Fetch weather data from OpenWeatherMap
+    response = requests.get(weather_api_url, params=parameters)
+    response.raise_for_status()
+    data = response.json()
 
-pro = data["hourly"][0]["weather"][0]["id"]
+    # Extract weather information for the next 12 hours
+    pro = data["hourly"][0]["weather"][0]["id"]
+    tiempo_horas = data["hourly"][:12]
+    mal_tiempo = False
 
-tiempo_horas = data["hourly"][:12]
-tiempo = False
+    # Check if bad weather (id < 700) is predicted in the next 12 hours
+    for hora in tiempo_horas:
+        if hora["weather"][0]["id"] < 700:
+            mal_tiempo = True
+            break
 
-for hora in tiempo_horas:
-    if hora["weather"][0]["id"] < 700:
-        tiempo = True
-        break
+    if mal_tiempo:
+        # Initialize Twilio client with SID and token
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
-if tiempo:
-    # Token de autenticación de Twilio
-    account_sid = "YOUR_TWILIO_ACCOUNT_SID"
-    auth_token = "YOUR_TWILIO_AUTH_TOKEN"
+        # Message to be sent via WhatsApp
+        mensaje = "¡Atención! Se espera mal tiempo en las próximas horas."
 
-    # Crea una instancia del cliente Twilio
-    client = Client(account_sid, auth_token)
+        # Send WhatsApp message
+        message = client.messages.create(
+            body=mensaje,
+            from_=TWILIO_WHATSAPP_FROM,  # Use the variable from config
+            to=WHATSAPP_TO  # Use the variable from config
+        )
 
-    # Cuerpo del mensaje con información meteorológica
-    mensaje = "¡Atención! Se espera mal tiempo en las próximas horas."
+        print("Mensaje enviado con éxito:", message.sid)
+    else:
+        print("El tiempo parece estar bien en las próximas horas.")
 
-    # Envía el mensaje de WhatsApp
-    message = client.messages.create(
-        body=mensaje,
-        from_='whatsapp:+17408072714',
-        to='whatsapp:+34618307559'
-    )
+except requests.exceptions.RequestException as e:
+    print(f"Error al obtener los datos del tiempo: {e}")
+except Exception as e:
+    print(f"Se produjo un error: {e}")
 
     print("Mensaje enviado con éxito:", message.sid)
 else:
